@@ -12,10 +12,11 @@ import (
 var ROWS, COLS int
 var source_file string
 var offsetX, offsetY int
-var text_buffer = [][]rune{}
+var text_buffer = [][]rune{} //rune = go alias for int32 characters
 var currentCol, currentRow int
 
-func insertRune(event termbox.Event) {
+func insertRune(event termbox.Event) { //creates a new slice 1 rune larger to facilitate the new character.
+	// Copies what's before the cursor in the previous slice into the new slice, inserts the character, copies what's after the cursor in the old slice into the new one.
 	newLine := make([]rune, len(text_buffer[currentRow])+1)
 	copy(newLine[:currentCol], text_buffer[currentRow][:currentCol])
 	if event.Key == termbox.KeySpace {
@@ -52,6 +53,7 @@ func processKeypress(event termbox.Event) {
 		saveFile()
 		return
 	}
+
 	switch event.Type {
 	case termbox.EventKey:
 		if event.Key == termbox.KeyEsc {
@@ -138,9 +140,11 @@ func displayTextBuffer() {
 		bufferRow := row + offsetY
 		for col := 0; col < COLS; col++ {
 			bufferCol := col + offsetX
+			ch := ' '
 			if bufferRow < len(text_buffer) && bufferCol < len(text_buffer[bufferRow]) {
-				termbox.SetCell(col, row, text_buffer[bufferRow][bufferCol], termbox.ColorGreen, termbox.ColorDefault)
+				ch = text_buffer[bufferRow][bufferCol]
 			}
+			termbox.SetCell(col, row, ch, termbox.ColorGreen, termbox.ColorDefault)
 		}
 	}
 }
