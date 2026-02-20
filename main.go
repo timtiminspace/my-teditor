@@ -4,6 +4,7 @@ import (
 	// "fmt"
 	"bufio"
 	"os"
+	"strconv"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/nsf/termbox-go"
@@ -14,6 +15,10 @@ var source_file string
 var offsetX, offsetY int
 var text_buffer = [][]rune{} //rune = go alias for int32 characters
 var currentCol, currentRow int
+var statusMessage = ""
+
+const MIN_COLS = 20
+const MIN_ROWS = 5
 
 func insertRune(event termbox.Event) { //creates a new slice 1 rune larger to facilitate the new character.
 	// Copies what's before the cursor in the previous slice into the new slice, inserts the character, copies what's after the cursor in the old slice into the new one.
@@ -43,9 +48,27 @@ func saveFile() {
 		w.WriteRune('\n')
 	}
 	w.Flush()
-	text_buffer = [][]rune{{}}
-	currentRow, currentCol = 0, 0
-	offsetX, offsetY = 0, 0
+	statusMessage = "Saved"
+}
+
+func itoa(i int) string {
+	return strconv.Itoa(i)
+}
+
+func drawStatusBar() {
+	status := source_file +
+		" | Ln " + itoa(currentRow+1) + ", Col " + itoa(currentCol+1)
+
+	if statusMessage != "" {
+		status += " | " + statusMessage
+	}
+
+	for i := 0; i < COLS; i++ {
+		termbox.SetCell(i, ROWS-1, ' ', termbox.ColorBlack, termbox.ColorWhite)
+	}
+
+	msg(0, ROWS-1,
+		termbox.ColorBlack, termbox.ColorWhite, status)
 }
 
 func processKeypress(event termbox.Event) {
@@ -55,6 +78,11 @@ func processKeypress(event termbox.Event) {
 	}
 
 	switch event.Type {
+
+	case termbox.EventResize:
+		COLS = event.Width
+		ROWS = event.Height
+		return
 	case termbox.EventKey:
 		if event.Key == termbox.KeyEsc {
 			termbox.Close()
@@ -129,14 +157,14 @@ func processKeypress(event termbox.Event) {
 		if currentRow < offsetY {
 			offsetY = currentRow
 		}
-		if currentRow >= offsetY+ROWS {
-			offsetY = currentRow - ROWS + 1
+		if currentRow >= offsetY+(ROWS-1) {
+			offsetY = currentRow - ROWS
 		}
 	}
 }
 
 func displayTextBuffer() {
-	for row := 0; row < ROWS; row++ {
+	for row := 0; row < ROWS-1; row++ {
 		bufferRow := row + offsetY
 		for col := 0; col < COLS; col++ {
 			bufferCol := col + offsetX
@@ -172,6 +200,14 @@ func read_file(filename string) {
 		row := []rune(line)
 		text_buffer = append(text_buffer, row)
 	}
+
+	if len(text_buffer) == 0 {
+		text_buffer = [][]rune{{}}
+	}
+}
+
+func terminalTooSmall() bool {
+	return COLS < MIN_COLS || ROWS < MIN_ROWS
 }
 
 func run() {
@@ -185,12 +221,12 @@ func run() {
 		source_file = "out.txt"
 		text_buffer = append(text_buffer, []rune{})
 	}
+	if len(text_buffer) == 0 {
+		text_buffer = [][]rune{{}}
+	}
 	w, h := termbox.Size()
 	COLS = w
 	ROWS = h // sets rows and columns to terminal width and height (MAY NOT BE ACCURATE)
-	if COLS < 80 {
-		COLS = 78
-	}
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 	// displayTextBuffer()
 }
@@ -200,8 +236,13 @@ func main() {
 	defer termbox.Close()
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 	for {
-		displayTextBuffer()
-		termbox.SetCursor(currentCol-offsetX, currentRow-offsetY)
+		if terminalTooSmall() {
+			msg(0, 0, termbox.ColorRed, termbox.ColorDefault, "Terminal too small")
+		} else {
+			displayTextBuffer()
+			drawStatusBar()
+			termbox.SetCursor(currentCol-offsetX, currentRow-offsetY)
+		}
 		termbox.Flush()           // synchronises the internal back buffer with the terminal, AKA, displays the stuff you drew up in the background
 		ev := termbox.PollEvent() // variable to record keystroke
 		processKeypress(ev)
