@@ -16,6 +16,8 @@ var offsetX, offsetY int
 var text_buffer = [][]rune{} //rune = go alias for int32 characters
 var currentCol, currentRow int
 var statusMessage = ""
+var searchMode bool
+var searchQuery string
 
 const MIN_COLS = 20
 const MIN_ROWS = 5
@@ -56,8 +58,7 @@ func itoa(i int) string {
 }
 
 func drawStatusBar() {
-	status := source_file +
-		" | Ln " + itoa(currentRow+1) + ", Col " + itoa(currentCol+1)
+	status := source_file + " | Ln " + itoa(currentRow+1) + ", Col " + itoa(currentCol+1)
 
 	if statusMessage != "" {
 		status += " | " + statusMessage
@@ -67,13 +68,66 @@ func drawStatusBar() {
 		termbox.SetCell(i, ROWS-1, ' ', termbox.ColorBlack, termbox.ColorWhite)
 	}
 
-	msg(0, ROWS-1,
-		termbox.ColorBlack, termbox.ColorWhite, status)
+	msg(0, ROWS-1, termbox.ColorBlack, termbox.ColorWhite, status)
+}
+
+func search() {
+	for i := 0; i < COLS; i++ {
+		termbox.SetCell(i, ROWS-2, ' ', termbox.ColorBlack, termbox.ColorWhite)
+	}
+}
+
+func drawSearchBar() {
+	msg(0, ROWS-2, termbox.ColorBlack, termbox.ColorWhite, "Search: "+searchQuery)
+}
+
+func doSearch(query string) {
+	for row, line := range text_buffer {
+		if string(line) == query {
+			currentRow = row
+			currentCol = 0
+			offsetY = row
+			offsetX = 0
+			statusMessage = "Found!"
+			return
+		}
+	}
+	statusMessage = "Not found"
 }
 
 func processKeypress(event termbox.Event) {
 	if event.Key == termbox.KeyCtrlS {
 		saveFile()
+		return
+	}
+
+	if searchMode {
+		if event.Key == termbox.KeyEsc {
+			searchMode = false
+			searchQuery = ""
+			return
+		}
+		if event.Key == termbox.KeyEnter {
+			doSearch(searchQuery)
+			searchMode = false
+			searchQuery = ""
+			return
+		}
+		if event.Key == termbox.KeyBackspace || event.Key == termbox.KeyBackspace2 {
+			if len(searchQuery) > 0 {
+				searchQuery = searchQuery[:len(searchQuery)-1]
+			}
+			return
+		}
+		if event.Ch != 0 {
+			searchQuery += string(event.Ch)
+		}
+		return
+	}
+
+	if event.Key == termbox.KeyCtrlLsqBracket {
+		searchMode = true
+		searchQuery = ""
 		return
 	}
 
@@ -240,7 +294,15 @@ func main() {
 			msg(0, 0, termbox.ColorRed, termbox.ColorDefault, "Terminal too small")
 		} else {
 			displayTextBuffer()
+			if searchMode {
+				drawSearchBar()
+			}
 			drawStatusBar()
+			if !searchMode {
+				termbox.SetCursor(currentCol-offsetX, currentRow-offsetY)
+			} else {
+				termbox.SetCursor(len("Search: ")+len(searchQuery), ROWS-2)
+			}
 			termbox.SetCursor(currentCol-offsetX, currentRow-offsetY)
 		}
 		termbox.Flush()           // synchronises the internal back buffer with the terminal, AKA, displays the stuff you drew up in the background
